@@ -1,2 +1,2 @@
 # crypto-physical-atk-project1
-> python main.pny
+run: python main.py
