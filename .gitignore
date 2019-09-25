@@ -358,7 +358,6 @@ MigrationBackup/
 
 
 # Custom
-.csv
-.xlsx
-__pycache__
-.pyproj
+*.csv
+*.xlsx
+*.pyproj
