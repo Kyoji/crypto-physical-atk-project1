@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.28307.852
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "timing_attack", "timing_attack.pyproj", "{01BDFC96-DF85-4B7C-8709-1AD485EF2EB1}"
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Crypto Physical Attack Project 1", "Crypto Physical Attack Project 1.pyproj", "{01BDFC96-DF85-4B7C-8709-1AD485EF2EB1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
