@@ -308,6 +308,7 @@ paket-files/
 # Python Tools for Visual Studio (PTVS)
 __pycache__/
 *.pyc
+.mypy_cache/
 
 # Cake - Uncomment if you are using it
 # tools/**
@@ -361,3 +362,4 @@ MigrationBackup/
 *.csv
 *.xlsx
 *.pyproj
+.vs

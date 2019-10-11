@@ -1,0 +1,397 @@
+import binascii
+import primes
+import mod_math
+import random
+import math
+import timeit
+import sys
+import statistics
+
+sys.setrecursionlimit(10000)
+
+# Modular Exponentiation using bits
+# x & 1 Checks least significant bit
+# x >>= 1 Shifts bits to the right (no rotation)
+# a^b mod c
+def bitwise_square_multiply(a, b, n):
+  product = 1
+  t = a
+  # As we shift, b will be consumed
+  while b != 0:
+    # Check LSB
+    if (b & 1) == 1:
+      # Multiply
+      product = (product * t) % n
+    # Square
+    t = (t * t) % n
+    # Shift right by 1 bit
+    b >>= 1
+  return product
+
+def bitwise_sm_timing_attack(a, b, n, bit_avg = 0, mod_avg = 0):
+  product = 1
+  t = a
+  # As we shift, b will be consumed
+  bit_time_avg = 0
+  total_time = 0
+  mod_time_avg = 0
+  predicted_bits = []
+  num_bits = 0
+  while b != 0:
+    num_bits += 1
+    bit_time, total_time = timeit.default_timer()
+    # Check LSB
+    bit = 0
+    if (b & 1) == 1:
+      bit = 1
+      # Multiply
+      mod_time = timeit.default_timer()
+      product = (product * t) % n
+      mod_time = timeit.default_timer() - mod_time
+      mod_time_avg += mod_time
+    # Square
+    t = (t * t) % n
+    # Shift right by 1 bit
+    b >>= 1
+
+    bit_time = timeit.default_timer() - bit_time
+    bit_time_avg += bit_time
+
+    if bit_avg != 0:
+      if bit_time > bit_avg:
+        predicted_bits.append('1')
+        #if bit != 1:
+        #  print('mismatch')
+      elif bit_time < bit_avg:
+        predicted_bits.append('0')
+        #print('0,', bit)
+      else:
+        print('the same')
+  bit_time_avg = bit_time_avg / num_bits
+  mod_time_avg = mod_time_avg / num_bits
+  total_time = timeit.default_timer() - total_time
+  return product, bit_time_avg, mod_time_avg, total_time, predicted_bits
+
+# Normal CRT Exponentiation
+def comp_crt_exp( cs, ds, ns ):
+  p = 0
+  q = 1
+  cp = bitwise_square_multiply(cs[p], ds[p], ns[p])
+  cq = bitwise_square_multiply(cs[q], ds[q], ns[q])
+  return (cp, cq)
+
+# Faulty CRT Exponentiation
+# Used to simulate the Fault Attack
+# One cp or cq is modified 
+def comp_crt_exp_corrupt( cs, ds, ns ):
+  p = 0
+  q = 1
+  # Choose cp or cq to be corrupted
+  corrupt = random.randrange(0,2)
+  cs = [ cs[p], cs[q] ]
+  # Corrupt
+  cs[corrupt] = cs[corrupt] ^ random.randrange(cs[corrupt].bit_length())
+  cp = bitwise_square_multiply(cs[p], ds[p], ns[p])
+  cq = bitwise_square_multiply(cs[q], ds[q], ns[q])
+  return (cp, cq)
+
+# Chinese Remainder Theorem modular exponentiation
+# c^d mod pq
+def crt_exp(c, d, p, q, exp=comp_crt_exp):
+  (n, d) = sk
+  # Map c part of Zn to Zp * Zq
+  (cp, cq) = map_to_zpzq(c, p, q)
+  # Calculate dp, dq
+  # p, q are prime. Can use Fermat's little theorem
+  ds = d % (p - 1), d % (q - 1)
+  # Compute exponent on cp, cq seperately
+  (cp, cq) = exp( (cp,cq), ds, (p,q) )
+  # Map result back to Zn
+  m = map_to_zn(p, q, cp, cq)
+  return m
+  
+
+# Chinese Remainder Theorem modular exponentiation
+# Implementing methods used in common RSA libraries
+# https://en.wikipedia.org/wiki/RSA_(cryptosystem)#Using_the_Chinese_remainder_algorithm
+# This should be faster
+def crt_exp_prebaked(c, p, q, dp, dq, qinv):
+  cp = bitwise_square_multiply(c, dp, p)
+  cq = bitwise_square_multiply(c, dq, q)
+  h = (qinv  * (cp - cq)) % p
+  m = cq + (h * q)
+  return m
+
+# Convert a utf-8 string to int
+def string_to_int(string):
+  i = string.encode('utf8')
+  i = binascii.hexlify(i)
+  i = int(i, 16)
+  return i
+
+# Convert an int to utf-8
+def int_to_string(num):
+  i = hex(num)
+  i = i[2:]
+  i = i.encode('ascii')
+  i = binascii.unhexlify(i)
+  i = i.decode('utf-8')
+  return i
+
+def rsa_gen_keys(test_run=False, bits=1024, e=65537):
+  if test_run:
+    if bits == 1024:
+      p = 150159479966345293925721454261213251088869815778430951479129372170907011086153443838752770349233708174961660860297212698028097207865689594273268671570054552340572156474025642297466584403151717541890149585228492196488230227470687079276681836034551238090972519586557098159601462842282927926104036027330160650639
+      q = 164413796657208684782385753448661619052414628159491876180638032751074833011980007328437609661959175584218181859809286222851826040577307100639072744985880224292082626606626978962132821528578131434028390575986685056356453850291541187323855534880934641953551321501819586522270445191819399668448517121248181374431
+    if bits == 4096:
+      p = 715855317469299697193447641262393632276505283229177561219010290325029651111812721944822311090800345979292763266946283078527532438649324873407656197048595360989279298399415771527417549494048647521208259687952138850013141376443160343989452568427561162200919978845834384140981790787805066467948934378134701289944500094860934361621959708767375295209732428682377044442623792110566621819603256026835035256398125070044427845687660916193615206841768987013701263778450698630893970117650136458025412166974383063780284162675329670324678678050520949280253187433907154579700556492225852198512684400975887733569069554401766014438653051058830425064459435199144822204163198445213957081013720606786114916044506026040688938201175853580114059771164057355871885369114618599677445465254865270715844056536907414780849558818528758502317592145159458979718086373032158410635211129354257555603254473353086820297528491851752611625672945802404987283652419091289945279620340613576981414415752234893271384087929271405437448313997991036012649427119237633020870573547227898580742086754988845482850103320197905865516514195659786265272611694021146934897644609719017978405733091185229106495210807583834267641292355454463822222213488145163822786005047313640779403666681
+      q = 955858034327238109861777833865577727680495224440177066201710622567557042241800903645451669265753649366027957569095699836093537982004130082400542868860445042462370757132324686591227804681568192558202976685868228467559238659286088298296505746406101406841149974822153166776746490970955973838342260995283905829414134777795907909410894918390791105242819932513961121316253298805419602948482954485658052631218616689808133940414579345626448758245210798588170889364102422189054582479598732583272801120792315438451929413465929538800144900387667653661188661574303265102296434744741045274892175812692119305356444672083210419472452005657797485132074917117461764607294677625315435543520775710846572250145716145646215931481565183220428651590630870353989949176634237549024810397858688057892402795509293137821857636180864700447907416155241226844776614993433689052831415316450392228854195891922344324664738575081467527139813733563361857497594316521087391137781092058991135737121628936760328172814359552834575377004544078876307891381248366941727593187987840652485382006138370337251365285527379532521037081868451005230063813967849738402321477685509517420494697120514487505178229915267099807384143826036075603720906885452090868395489316012705717632907479
+  else:
+    p = primes.generate_prime_number(bits)
+    q = primes.generate_prime_number(bits)
+  n = p*q
+  lcm = mod_math.lcm( p-1, q-1 ) # Carmichael's totient
+  d = mod_math.modinv(e, lcm)
+  pk = (n, e)
+  sk = (n, d)
+  return (pk, sk, p, q)
+
+# Encrypt using fast exponentiation
+def rsa_fe_encrypt(m, pk):
+  start = timeit.default_timer()
+  (n, e) = pk
+  c = bitwise_square_multiply(m, e, n)
+  end = timeit.default_timer() - start
+  return c, end
+
+# Decrypt using fast exponentiation
+def rsa_fe_decrypt(c, sk):
+  start = timeit.default_timer()
+  (n, d) = sk
+  m = bitwise_square_multiply(c, d, n)
+  end = timeit.default_timer() - start
+  return m, end
+
+# Decrypt using CRT
+def rsa_crt_decrypt(c, sk, p, q, exp=comp_crt_exp):
+  start = timeit.default_timer()
+  (n, d) = sk
+  m = crt_exp(c, d, p, q, exp)
+  end = timeit.default_timer() - start
+  return m, end
+
+def rsa_crtprebaked_decrypt(c, sk, p, q):
+  (n, d) = sk
+  (dp, dq) = d % (p - 1), d % (q - 1)
+  qinv = mod_math.modinv(q, p)
+  start = timeit.default_timer()
+  m = crt_exp_prebaked(c, p, q, dp, dq, qinv)
+  end = timeit.default_timer() - start
+  return m, end
+
+# Map value a in group Zn isomorphic to Zp and Zq
+def map_to_zpzq(a, p, q):
+  return (a % p, a % q)
+
+# Map values p, q in groups Zp, Zq isomorphic to Zn to group Zn
+def map_to_zn(p, q, a, b):
+  # Given group Zp * Zq = Zn,
+  # we must find the inverse of p in Zq and the inverse of q in Zp
+  # pinv is the number s.t. pinv*p === 1 mod q, pinv*p === 0 mod p
+  # qinv is the number s.t. qinv*q === 1 mod q, qinv*q === 0 mod q
+  pinv = mod_math.modinv(p, q)
+  qinv = mod_math.modinv(q, p)
+
+  # let s = pinv, t = pinv
+  s = pinv
+  t = qinv
+
+  # if sp === 1 mod q, then a(sp) === a mod q
+  # if tq === 1 mod p, then b(tq) === b mod p
+  # To map from (Zp, Zq) -> Zn, we combine then mod p*q:
+  mp = s*p*b
+  mq = t*q*a
+  return( (mp + mq) % (p * q) )
+
+def test_fastexp(c, sk, f_file, iterations=10):
+  avg = 0
+  for i in range(0, iterations):
+    _, time = rsa_fe_decrypt(c, sk)
+    avg += time
+  avg = avg / iterations
+  return avg
+
+def test_crt(c, sk, p, q, f_file, iterations=10):
+  avg = 0
+  for i in range(0, iterations):
+    _, time = rsa_crt_decrypt(c, sk, p, q)
+    avg += time
+  avg = avg / iterations
+  return avg
+
+def test_crt_prebaked(c, sk, p, q, f_file, iterations=10):
+  avg = 0
+  for i in range(0, iterations):
+    _, time = rsa_crtprebaked_decrypt(c, sk, p, q)
+    avg += time
+  avg = avg / iterations
+  return avg
+
+# -------------------------------------------------------------------------------------------------------------
+# Setup
+# -------------------------------------------------------------------------------------------------------------
+
+print('---------------------------------------')
+print('Project 1: RSA encryption/decryption \n')
+print('Part A: Encryption/Decryption Speed of the Chinese Remainder Theorem vs. Fast Exponentiation')
+print('---------------------------------------')
+print()
+
+message = 'please do not be alarmed'
+mint = string_to_int(message)
+print("Message to be encrypted:", message)
+print() 
+
+print('---------------------------------------')
+bits = 4096
+print('Generating a private and public key from', bits, 'bit primes')
+print()
+(pk, sk, p, q) = rsa_gen_keys(True, bits)
+
+print('---------------------------------------')
+print('Encrypting message...')
+c, enc_time = rsa_fe_encrypt(mint, pk)
+print('Resulting cipher:', c)
+print()
+
+# -------------------------------------------------------------------------------------------------------------
+# Runtime tests 
+# -------------------------------------------------------------------------------------------------------------
+
+# print('---------------------------------------')
+# print('Decrypting using Fast Exponentiation...')
+# m, fxp_time = rsa_fe_decrypt(c, sk)
+# print('Decrypted message:', int_to_string(m))
+# print('Decryption took', fxp_time, 'seconds')
+# print()
+
+# print('---------------------------------------')
+# print('Decrypting using Chinese Remainder Theorem...')
+# m2, crt_time = rsa_crt_decrypt(c, sk, p, q)
+# print('Decrypted message:', int_to_string(m2))
+# print('Decryption took', crt_time, 'seconds')
+# print()
+
+# print('---------------------------------------')
+# print('Decrypting using CRT with pre-calcuated values')
+# m3, crt_prb_time = rsa_crtprebaked_decrypt(c, sk, p, q)
+# print('Decrypted message:', int_to_string(m3))
+# print('Decryption took', crt_prb_time, 'seconds')
+# print()
+
+# print('---------------------------------------')
+# print('Running 10 tests using a', bits * 2,'bit N')
+# f = open('results.csv', 'w')
+# f.write('Iteration,Fast Exponentiation,CRT,CRT Pre-baked')
+# print('Fast Exp Average (10 runs):', test_fastexp(c, sk, f))
+# print('CRT Average (10 runs):', test_crt(c, sk, p, q, f))
+# print('CRT Pre-baked Average (10 runs):', test_crt_prebaked(c, sk, p, q, f))
+# f.close()
+# print()
+
+# -------------------------------------------------------------------------------------------------------------
+# Fault Attack 
+# -------------------------------------------------------------------------------------------------------------
+
+# print('---------------------------------------')
+# print('Project 1: RSA encryption/decryption \n')
+# print('Part B: Demonstrating the RSA Fault Attack')
+# print('---------------------------------------')
+# print()
+
+# print('The RSA Fault Attack is based on the Chinese Remainder Theorem inplemention of the exponentiation method.')
+# print('It occurs when exactly one message cp or cq is corrupted whether by software/hardware fault, or by an attacker')
+# print('It requires a correct message m, and when executed successfully it exposes one factor of n, p or q')
+# print('We will focus on one case: cq becoming corrupted. Corrupted cq will be referred to as cq`')
+# print('Normally, cq is a number s.t. cq === cq mod p and cq === cq mod q')
+# print('cq` is s.t. cq` === cq mod p but cq` !== cq mod q')
+# print()
+# print('Stated in another way, cq` is s.t. p | (cq` - cq) but q !| (cq` - cq)')
+# print('Since q does not divide cq`, we can calcuate the gcd of the difference between it and n to find p:')
+# print('gcd(cq` - cq, n)')
+# print('The resulting number will equal p. If cp was corrupted, the resulting number will equal q')
+# print()
+# print('Demonstration')
+# print('We must use RSA Sign and Verify, which is RSA Decrypt and Encrypt respectively')
+# message = 'The fault attack is pretty cool'
+# mint = string_to_int(message)
+# print('The message to be signed is:', message)
+# s, _ = rsa_crt_decrypt(mint, sk, p, q)
+# print('The computed signature m is:')
+# print(s)
+# print('Verifying the signature gives us:')
+# v, _ = rsa_fe_encrypt(s, pk)
+# print(int_to_string(v))
+# print()
+# print('Next, we generate a corrupted message m`:')
+# sc, _ = rsa_crt_decrypt(mint, sk, p, q, comp_crt_exp_corrupt)
+# print('The computed signature m` is computed by randomly corrupting message mp or mq:')
+# print(sc)
+# print('Next, take the gcd of (m` - m, n):')
+# recovered_factor = math.gcd(sc - s, p*q)
+# print('The recovered factor is:')
+# print(recovered_factor)
+# print('Which should match p or q factors of n:')
+# print('p:', p)
+# print('q:', q)
+
+# -------------------------------------------------------------------------------------------------------------
+# Timing Attack
+# -------------------------------------------------------------------------------------------------------------
+
+# http://www.cs.sjsu.edu/faculty/stamp/students/article.html
+# https://phedny.net/papers/Timing%20attacks%20on%20RSA.pdf 
+# For any number n, its binary representation is a series of bits
+# RSA implementations that use the Square and Multiply algorithm are theoretically vulnerable
+# to the Timing Attack, which uses the fact that more work is done on a '1' bit than a '0' bit
+# as it decrypts a message m with secret key d. This difference can be used to expose the value of d
+
+# Let d represent the secret key. d0 is the MSB, which will always be 1
+# The timing attack starts at d1
+
+# Step 1: Generate two messages y and z s.t. y^3 < N and Z^2 < N < Z^3 
+# The idea is to force modulation on the z message, but not the y message,
+# so a difference between decryption of y and z can be observed to ascertain if d1 == 1 or d1 == 0
+
+
+# Step 1: Compute mean of (total_time - bit_time - mod_time) for k iterations
+# Step 2: Compute std of (total_time - bit_time - mod_time) for k iterations
+# Step 3: Compute mean of (total_time - bit_time) for k iterations
+# Step 4: Compute std of (total_time - bit_time) for k iterations
+
+bit_times = []
+mod_times = []
+total_times = []
+iters = 10
+j = 0
+for i in range(0, iters):
+  j += 1
+  _, b, m, t, _ = bitwise_sm_timing_attack(mint, sk[1], p*q)
+  bit_times.append(b)
+  mod_times.append(m)
+  total_times.append(t)
+
+bit_times_mean = mean(bit_times)
+
+_, b, m, prediction = bitwise_sm_timing_attack(mint, sk[1], p*q, bit_times)
+
+prediction.reverse()
+pred_int = int("".join(prediction), base=2 )
+
+print( pred_int )
+print(sk[1])
+print(pred_int - sk[1])
+
+if sk[1] == pred_int:
+	print('Match. Secret key recovered')
+
