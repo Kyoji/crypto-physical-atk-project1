@@ -50,7 +50,7 @@ def timingAttackBoneh(ti_file="modboneh.csv", Ti_file="modexp.csv", Mi_file="ran
 
     print("Calculating Pearson coefficients to determine a correlation between ti and Ti for the first 3 bits of d")
     print("Ideally we see -1 or 1 for a correlation, 0 for no correlation")
-    for i in range(0, 2):
+    for i in range(0, 3):
         T_avg = 0
         for j in range(0, 10):
             _, T, t_list = bitwise_square_multiply_timings(Mi[i], sk[1], sk[0])

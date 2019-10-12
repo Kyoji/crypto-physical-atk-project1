@@ -48,11 +48,11 @@ def bitwise_square_multiply_timings(M, d, N):
     while d != 0:
         #print(i)
         # Check LSB
+        modt = timeit.default_timer()
         if (d & 1) == 1:
-            modt = timeit.default_timer()
             # Multiply
             C = (C * z) % N
-            modt = timeit.default_timer() - modt
+        modt = timeit.default_timer() - modt
         # Square
         z = (z * z) % N
         # Shift right by 1 bit
